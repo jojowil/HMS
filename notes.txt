@@ -23,3 +23,9 @@ do
         ((i=i+1))
     done
 done
+
+mysql> create user 'hms'@'localhost' identified by 'sdiuhfas748y34eurbf7';
+Query OK, 0 rows affected (0.11 sec)
+
+mysql> grant all on hms.* to 'hms'@'localhost';
+Query OK, 0 rows affected (0.01 sec)

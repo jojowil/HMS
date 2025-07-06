@@ -1,43 +1,36 @@
 import getopt, sys
-import re
-
-
-#for x in 36 37
-#do
-#    let i=0
-#    while ((i<256))
-#    do
-#        echo "insert into hms_ip values(null, null, '141.222.$x.$i', ,null, 'N')"
-#        ((i=i+1))
-#    done
-#done
-
-#create database hms;
-#create table hms_ip(
-#    host varchar(32)
-#    , mac varchar(12)
-#    , ip varchar(15)
-#    , desc varchar(256)
-#    , dhcp enum('Y', 'N')
-#);
+import re, mysql.connector
 
 # Delete -> update hms_ip set host = null where host = ?? or ip = ??
 # modify ->
 
-
 def usage(msg=None):
     if msg is not None:
         print('\nERROR: ' + msg + '\n')
-    print('Usage: { -A | -M | -D | -G } -i ip -h hostname -d "description" -m mac -x\n')
+    print('Usage: { -A | -M | -D | -L | -F } -i ip -h hostname -d "description" -m mac -x\n')
+    print("\n\t-A add\n\t-M modify\n\t-D delete\n\t-L list\n\t-F free list\n")
     sys.exit(1)
 
 def process():
     print('Processing')
 
 def main():
-    # try to get options
+    #
+    # Get password for user with table access
+    #
+    pfile = '/etc/security/mydbpw'
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'AMDGi:h:m:d:x')
+        f = open(pfile, 'r')
+        dbpwd = f.read().strip()
+    except IOError:
+        print('Cannot open', pfile, '.')
+        sys.exit(3)
+    f.close()
+
+    # try to get options
+    opts=''  # remove opts not assigned warning!
+    try:
+        opts, args = getopt.getopt(sys.argv[1:], 'AMDLFi:h:m:d:x')
     except getopt.GetoptError as err:
         # print help information and exit:
         print(err)  # will print something like 'option -a not recognized'
@@ -49,10 +42,10 @@ def main():
     mac = None
     desc = None
     dhcp = 'N'
-    modeset = "AMDG"
+    modeset = "AMDLF"
     mode = ""
 
-    ipregex = '^(?:(?:25[0-5]|(?:2[0-4]|1\d|[1-9]|)\d)\.?\\b){4}$'
+    ipregex = '^(?:(?:25[0-5]|(?:2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}$'
     ipvalid = re.compile(ipregex)
     macregex = '^(?:[0-9a-fA-F]){12}$'
     macvalid = re.compile(macregex)
@@ -83,7 +76,7 @@ def main():
     # process options
     #print('Mode is', mode) #debug
     if len(mode) > 1:
-        usage('Choose one of add, modify, delete, or get.')
+        usage('Choose one of add, modify, delete, list, or free.')
 
     if mode == 'A':
         print('Adding...')
@@ -93,6 +86,8 @@ def main():
         print('Deleting...')
     elif mode == 'G':
         print('Getting...')
+    elif mode == 'F':
+        print('Free list...')
     else:
         usage('FATAL: Unknown mode')
 
