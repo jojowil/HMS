@@ -7,7 +7,7 @@ import re
 #    let i=0
 #    while ((i<256))
 #    do
-#        echo "insert into hms_ip values(null, null, '141.222.$x.$i', 'N')"
+#        echo "insert into hms_ip values(null, null, '141.222.$x.$i', ,null, 'N')"
 #        ((i=i+1))
 #    done
 #done

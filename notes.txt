@@ -1,0 +1,25 @@
+create database hms;
+use hms;
+create table hms_ip(
+    host varchar(32)
+    , mac varchar(12)
+    , ip varchar(15)
+    , descr varchar(256)
+    , dhcp enum('Y', 'N')
+);
+
+create table hms_cname(
+    cname varchar(32)
+    , host varchar(255)
+);
+
+
+for x in 36 37
+do
+    let i=0
+    while ((i<256))
+    do
+        echo "insert into hms_ip values(null, null, '141.222.$x.$i', null, 'N');"
+        ((i=i+1))
+    done
+done
