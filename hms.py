@@ -22,6 +22,17 @@ def usage(msg=None):
     sys.exit(1)
 
 
+def check_mac_inuse(cnx, mac):
+    try:
+        cur = cnx.cursor()
+        cur.execute("SELECT mac FROM hms_ip WHERE mac = %s ", (mac,))
+        cur.fetchone()
+        return True if cur.rowcount > 0 else False
+    except mysql.connector.Error as err:
+        print('MySQL error: {}'.format(err))
+        bail()
+
+
 def check_host_inuse(cnx, host):
     try:
         cur = cnx.cursor()
@@ -45,7 +56,27 @@ def check_ip_inuse(cnx, ip):
 
 
 def do_add(cnx, ip, host, desc, mac, dhcp):
-    print('Adding...')
+    # mac is optional.
+    if mac is None and dhcp == 'Y':
+        print('Cannot use DHCP without a mac!')
+        sys.exit(3)
+
+    # mac must not already exist.
+    if mac is not None and check_mac_inuse(cnx, mac):
+        print('MAC %s is already in use.' % mac)
+        sys.exit(3)
+
+    # host is required and unique.
+    if host is None:
+        print('No host name specified.')
+        sys.exit(3)
+    elif check_host_inuse(cnx, host):
+        print('Host %s is already in use.' % host)
+        sys.exit(3)
+
+    # desc is optional, but recommended.
+    if desc is None:
+        print('No description specified. You should really describe the purpose.')
 
     # if you cannot afford and IP, one will be provided for you.
     if ip is None:
@@ -65,23 +96,7 @@ def do_add(cnx, ip, host, desc, mac, dhcp):
         print('IP %s is already in use.' % ip)
         sys.exit(3)
 
-    # mac is optional
-    if mac is None and dhcp == 'Y':
-        print('Cannot use DHCP without a mac!')
-        sys.exit(3)
-
-    # host is required and unique
-    if host is None:
-        print('No host name specified.')
-        sys.exit(3)
-    elif check_host_inuse(cnx, host):
-        print('Host %s is already in use.' % host)
-        sys.exit(3)
-
-    # desc is optional, but recommended.
-    if desc is None:
-        print('No description specified. You should really describe the purpose.')
-
+    # let's get this query together now.
     query = "update hms_ip set host='%s'" % host
     if mac is not None:
         query += ",mac='%s'" % mac
@@ -89,8 +104,9 @@ def do_add(cnx, ip, host, desc, mac, dhcp):
         query += ",descr='%s'" % desc
     if dhcp is not None:
         query += ",dhcp='%s'" % dhcp
-    query += " where ip='%s';" % ip
+    query += " where ip='%s'" % ip
 
+    # ok, let's add this thing...
     print(query)
     try:
         cur = cnx.cursor()
@@ -114,31 +130,27 @@ def do_modify(cnx, ip, host, desc, mac, dhcp):
         cur = cnx.cursor()
         cur.execute(query)
         row = cur.fetchone()
-        if row is None:
-            print('No entry found with %s or %s' % (ip, host))
-        else:
-            print('Host ', row[0])
-            print('IP   ', row[1])
-            print('MAC  ', row[2])
-            print('Desc ', row[3])
-            print('DHCP ', row[4])
+
     except mysql.connector.Error as err:
         print('MySQL error: {}'.format(err))
         bail()
 
 
 def do_delete(cnx, ip, host):
-    print('Deleting...')
+    # Mst provide one or the other.
     if (ip is None and host is None) or (ip is not None and host is not None):
         print('Must specify either ip or host.')
         sys.exit(5)
-    if not check_ip_inuse(cnx, ip):
+    # IP in use?
+    if ip is not None and not check_ip_inuse(cnx, ip):
         print('IP %s is not in use.' % ip)
         sys.exit(5)
-    if not check_host_inuse(cnx, host):
+    # host in use?
+    if host is not None and not check_host_inuse(cnx, host):
         print('Host %s does not.' % host)
         sys.exit(5)
-    else:
+    # get the ip if we only have the host
+    if ip is None and host is not None:
         query = "select ip from hms_ip where host='%s'" % host
         try:
             cur = cnx.cursor()
@@ -149,6 +161,7 @@ def do_delete(cnx, ip, host):
             bail()
 
     query = "update hms_ip set host=null, descr=null, mac=null, dhcp='N' where ip='%s' and host is not null" % ip
+    #print(query)
     try:
         cur = cnx.cursor()
         cur.execute(query)
@@ -165,7 +178,6 @@ def do_delete(cnx, ip, host):
 
 
 def do_list(cnx, ip, host):
-    print('Listing...')
     if (ip is None and host is None) or (ip is not None and host is not None):
         print('Must specify either ip or host.')
         sys.exit(4)
