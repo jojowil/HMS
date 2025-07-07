@@ -15,7 +15,7 @@ def usage(msg=None):
         print('\nERROR: ' + msg + '\n')
     print('Usage: { -A | -M | -D | -L | -F } -i ip -h hostname -d "description" -m mac -x\n')
     print("\n\t-A [ -i ip ] -h hostname [ -m mac ] [ -d \"description\" ] [ -x ]"
-          "\n\t-M -i ip [ -h hostname | -m mac | -d \"description\" | -x ]"
+          "\n\t-M -h hostname { -m mac | -d \"description\" | -x }"
           "\n\t-D -i ip | -h hostname"
           "\n\t-L -i ip | -h hostname"
           "\n\t-F\n")
@@ -240,7 +240,6 @@ def main():
         print(err)  # will print something like 'option -a not recognized'
         usage()
 
-    output = None
     ip = None
     host = None
     mac = None
@@ -253,6 +252,10 @@ def main():
     ipvalid = re.compile(ipregex)
     macregex = '^(?:[0-9a-fA-F]){12}$'
     macvalid = re.compile(macregex)
+    hostregex ='^[a-zA-Z][a-zA-Z0-9\\-]{1,31}$'
+    hostvalid = re.compile(hostregex)
+    descregex = '^[\\ a-zA-Z0-9_\\-\\.]{1,31}$'
+    descvalid = re.compile(descregex)
 
     for o, a in opts:
         opt = o[1:]
@@ -265,13 +268,16 @@ def main():
                 usage(ip + ' is not a valid IPv4 address')
         elif opt == 'h':
             host = a
+            if not hostvalid.match(host):
+                usage(host + ' is not a valid host name')
         elif opt == 'm':
             mac = a.replace(':', '').replace('-', '').replace('.', '')
             if not macvalid.match(mac):
                 usage(mac + ' is not a valid MAC address')
         elif opt == 'd':
             desc = a
-            print(desc)
+            if not descvalid.match(desc):
+                usage(desc + ' is not a valid description')
         elif opt == 'x':
             dhcp = 'Y'
         else:
@@ -297,9 +303,7 @@ def main():
     if mode == 'A':
         do_add(cnx, ip, host, desc, mac, dhcp)
     elif mode == 'M':
-        print('Modifying...')
-        if host is None or ip is None:
-            print('Must specifiy ')
+        do_modify(cnx, ip, host, desc, mac, dhcp)
     elif mode == 'D':
         do_delete(cnx, ip, host)
     elif mode == 'L':

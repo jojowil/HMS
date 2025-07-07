@@ -24,7 +24,7 @@ do
     done
 done
 
-mysql> create user 'hms'@'localhost' identified by 'sdiuhfas748y34eurbf7';
+mysql> create user 'hms'@'localhost' identified by 'sooperdooperpassword!';
 Query OK, 0 rows affected (0.11 sec)
 
 mysql> grant all on hms.* to 'hms'@'localhost';
