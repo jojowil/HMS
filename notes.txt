@@ -29,3 +29,6 @@ Query OK, 0 rows affected (0.11 sec)
 
 mysql> grant all on hms.* to 'hms'@'localhost';
 Query OK, 0 rows affected (0.01 sec)
+
+
+-A -i 141.222.36.5 -h newhost -d "Sooper Dooper" -m abcd.1234.98ED -x
