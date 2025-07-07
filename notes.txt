@@ -1,9 +1,9 @@
 create database hms;
 use hms;
 create table hms_ip(
-    host varchar(32)
-    , mac varchar(12)
-    , ip varchar(15)
+    host varchar(32) unique
+    , mac varchar(12) unique
+    , ip varchar(15) unique
     , descr varchar(256)
     , dhcp enum('Y', 'N')
 );
