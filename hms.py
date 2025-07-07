@@ -4,109 +4,207 @@ import re, mysql.connector
 # Delete -> update hms_ip set host = null where host = ?? or ip = ??
 # modify ->
 
+
+def bail():
+    print('Something went wrong. See above for some kind of hint.')
+    sys.exit(255)
+
+
 def usage(msg=None):
     if msg is not None:
         print('\nERROR: ' + msg + '\n')
     print('Usage: { -A | -M | -D | -L | -F } -i ip -h hostname -d "description" -m mac -x\n')
-    print("\n\t-A add\n\t-M modify\n\t-D delete\n\t-L list\n\t-F free list\n")
+    print("\n\t-A [ -i ip ] -h hostname [ -m mac ] [ -d \"description\" ] [ -x ]"
+          "\n\t-M -i ip [ -h hostname | -m mac | -d \"description\" | -x ]"
+          "\n\t-D -i ip | -h hostname"
+          "\n\t-L -i ip | -h hostname"
+          "\n\t-F\n")
     sys.exit(1)
 
+
 def check_host_inuse(cnx, host):
-    cur = cnx.cursor()
-    cur.execute("SELECT COUNT(*) FROM hms_ip WHERE host = %s ", (host,))
-    inuse = True if cur.rowcount > 0 else False
-    # must fetch or unread result
-    cur.fetchall()
-    return inuse
+    try:
+        cur = cnx.cursor()
+        cur.execute("SELECT ip FROM hms_ip WHERE host = %s ", (host,))
+        cur.fetchone()
+        return True if cur.rowcount > 0 else False
+    except mysql.connector.Error as err:
+        print('MySQL error: {}'.format(err))
+        bail()
+
 
 def check_ip_inuse(cnx, ip):
-    cur = cnx.cursor()
-    cur.execute("SELECT COUNT(*) FROM hms_ip WHERE ip = %s and host is not null", (ip,))
-    inuse = True if cur.rowcount > 0 else False
-    # must fetch or unread result
-    cur.fetchall()
-    return inuse
+    try:
+        cur = cnx.cursor()
+        cur.execute("SELECT host FROM hms_ip WHERE ip = %s and host is not null", (ip,))
+        cur.fetchone()
+        return True if cur.rowcount > 0 else False
+    except mysql.connector.Error as err:
+        print('MySQL error: {}'.format(err))
+        bail()
 
 
 def do_add(cnx, ip, host, desc, mac, dhcp):
     print('Adding...')
-    cur = cnx.cursor()
+
+    # if you cannot afford and IP, one will be provided for you.
+    if ip is None:
+        print('No IP specified. Using next available.')
+        try:
+            cur = cnx.cursor()
+            cur.execute('SELECT ip FROM hms_ip WHERE host is null limit 1')
+            ip = cur.fetchone()[0]
+            if cur.rowcount == 0:
+                print('No free IPs available.')
+                sys.exit(3)
+            print('Using free IP: {}'.format(ip))
+        except mysql.connector.Error as err:
+            print('MySQL error: {}'.format(err))
+            bail()
+    elif check_ip_inuse(cnx, ip):
+        print('IP %s is already in use.' % ip)
+        sys.exit(3)
+
     # mac is optional
     if mac is None and dhcp == 'Y':
         print('Cannot use DHCP without a mac!')
         sys.exit(3)
+
     # host is required and unique
     if host is None:
         print('No host name specified.')
         sys.exit(3)
     elif check_host_inuse(cnx, host):
-            print('Host %s is already in use.' % host)
-            sys.exit(3)
+        print('Host %s is already in use.' % host)
+        sys.exit(3)
+
     # desc is optional, but recommended.
     if desc is None:
         print('No description specified. You should really describe the purpose.')
-    # if you cannot afford and IP, one will be provided for you.
-    if ip is None:
-        print('No IP specified. Using next available.')
-        cur.execute('SELECT ip FROM hms_ip WHERE host is null limit 1')
-        if cur.rowcount == 0:
-            print('No free IPs available.')
-            sys.exit(3)
-        ip = cur.fetchone()
-    else:
-        if check_ip_inuse(cnx, ip):
-            print('IP already in use.')
-            sys.exit(3)
-    query = "update hms_ip set host='%s'" % (host)
+
+    query = "update hms_ip set host='%s'" % host
     if mac is not None:
-        query += ",mac='%s'" % (mac)
+        query += ",mac='%s'" % mac
     if desc is not None:
-        query += ",descr='%s'" % (desc)
+        query += ",descr='%s'" % desc
     if dhcp is not None:
-        query += ",dhcp='%s'" % (dhcp)
-    query += " where ip='%s';" % (ip)
+        query += ",dhcp='%s'" % dhcp
+    query += " where ip='%s';" % ip
 
     print(query)
-    cur.execute(query)
-    cnx.commit()
+    try:
+        cur = cnx.cursor()
+        cur.execute(query)
+        cnx.commit()
 
-    # Check the number of affected rows
-    affected_rows = cur.rowcount
+        # Check the number of affected rows
+        affected_rows = cur.rowcount
+        if affected_rows > 0:
+            print(f"{affected_rows} record(s) updated successfully.")
+        else:
+            print("No records were updated, and that's kinda weird.")
+    except mysql.connector.Error as err:
+        print('MySQL error: {}'.format(err))
+        bail()
 
-    if affected_rows > 0:
-        print(f"{affected_rows} record(s) updated successfully.")
-    else:
-        print("No records were updated (either no matching rows or data was already the same).")
 
-def do_modify(cnx, ip, desc, mac, dhcp):
-    return
+def do_modify(cnx, ip, host, desc, mac, dhcp):
+    query = "update hms_ip set ip='%s'" % ip
+    try:
+        cur = cnx.cursor()
+        cur.execute(query)
+        row = cur.fetchone()
+        if row is None:
+            print('No entry found with %s or %s' % (ip, host))
+        else:
+            print('Host ', row[0])
+            print('IP   ', row[1])
+            print('MAC  ', row[2])
+            print('Desc ', row[3])
+            print('DHCP ', row[4])
+    except mysql.connector.Error as err:
+        print('MySQL error: {}'.format(err))
+        bail()
 
-def do_delete(cnx, ip, desc, mac):
+
+def do_delete(cnx, ip, host):
     print('Deleting...')
+    if (ip is None and host is None) or (ip is not None and host is not None):
+        print('Must specify either ip or host.')
+        sys.exit(5)
+    if not check_ip_inuse(cnx, ip):
+        print('IP %s is not in use.' % ip)
+        sys.exit(5)
+    if not check_host_inuse(cnx, host):
+        print('Host %s does not.' % host)
+        sys.exit(5)
+    else:
+        query = "select ip from hms_ip where host='%s'" % host
+        try:
+            cur = cnx.cursor()
+            cur.execute(query)
+            ip = cur.fetchone()
+        except mysql.connector.Error as err:
+            print('MySQL error: {}'.format(err))
+            bail()
+
+    query = "update hms_ip set host=null, descr=null, mac=null, dhcp='N' where ip='%s' and host is not null" % ip
+    try:
+        cur = cnx.cursor()
+        cur.execute(query)
+        cnx.commit()
+        affected_rows = cur.rowcount
+        if affected_rows > 0:
+            print(f"{affected_rows} record(s) updated successfully.")
+        else:
+            print("No records were updated, and that's kinda weird.")
+    except mysql.connector.Error as err:
+        print('MySQL error: {}'.format(err))
+        bail()
     return
+
 
 def do_list(cnx, ip, host):
-    if (ip is None and host is None) or (ip is not None and host is None):
+    print('Listing...')
+    if (ip is None and host is None) or (ip is not None and host is not None):
         print('Must specify either ip or host.')
         sys.exit(4)
-    query = 'select * from hms_ip where '
+    query = 'select host, ip, mac, descr, dhcp from hms_ip where '
     if ip is not None:
-        query += "ip = '%s'" % (ip)
+        query += "ip = '%s'" % ip
     else:
-        query += "host = '%s'" % (host)
-    cur = cnx.cursor()
-    cur.execute(query)
-    return
+        query += "host = '%s'" % host
+    try:
+        cur = cnx.cursor()
+        cur.execute(query)
+        row = cur.fetchone()
+        if row is None:
+            print('No entry found with %s or %s' % (ip, host))
+        else:
+            print('Host ', row[0])
+            print('IP   ', row[1])
+            print('MAC  ', row[2])
+            print('Desc ', row[3])
+            print('DHCP ', row[4])
+    except mysql.connector.Error as err:
+        print('MySQL error: {}'.format(err))
+        bail()
+
 
 def do_freelist(cnx):
     print('Free list...')
-    cur = cnx.cursor()
-    # Execute a query
-    cur.execute('SELECT ip from hms_ip where host is null')
-    for row in cur:
-        # Access data by index (e.g., row[0], row[1])
-        print(f'FREE: {row[0]}')
-    print('\nTotal free IPs is', cur.rowcount)
+    try:
+        cur = cnx.cursor()
+        # Execute a query
+        cur.execute('SELECT ip from hms_ip where host is null')
+        for row in cur:
+            # Access data by index (e.g., row[0], row[1])
+            print(f'FREE: {row[0]}')
+        print('\nTotal free IPs is', cur.rowcount)
+    except mysql.connector.Error as err:
+        print('MySQL error: {}'.format(err))
+        bail()
+
 
 def main():
     #
@@ -191,9 +289,9 @@ def main():
         if host is None or ip is None:
             print('Must specifiy ')
     elif mode == 'D':
-        do_delete(cnx, host)
+        do_delete(cnx, ip, host)
     elif mode == 'L':
-        print('Getting...')
+        do_list(cnx, ip, host)
     elif mode == 'F':
         do_freelist(cnx)
     else:
@@ -201,6 +299,7 @@ def main():
 
     # Close connection
     cnx.close()
+
 
 if __name__ == '__main__':
     main()
