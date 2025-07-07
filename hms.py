@@ -13,12 +13,10 @@ def bail():
 def usage(msg=None):
     if msg is not None:
         print('\nERROR: ' + msg + '\n')
-    print('Usage: { -A | -M | -D | -L | -F } -i ip -h hostname -d "description" -m mac -x\n')
-    print("\n\t-A [ -i ip ] -h hostname [ -m mac ] [ -d \"description\" ] [ -x ]"
-          "\n\t-M -h hostname { -m mac | -d \"description\" | -x }"
-          "\n\t-D -i ip | -h hostname"
-          "\n\t-L -i ip | -h hostname"
-          "\n\t-F\n")
+    print('Usage:  hms -A -h hostname [ -i ip ] [ -d description ] [ -m mac] [ -x ]')
+    print('        hms -M -h hostname { -d description | -m mac] | -x } [...]')
+    print('        hms { -D | L } -h hostname | -i ip')
+    print('        hms -F\n')
     sys.exit(1)
 
 
@@ -50,6 +48,20 @@ def check_ip_inuse(cnx, ip):
         cur.execute("SELECT host FROM hms_ip WHERE ip = %s and host is not null", (ip,))
         cur.fetchone()
         return True if cur.rowcount > 0 else False
+    except mysql.connector.Error as err:
+        print('MySQL error: {}'.format(err))
+        bail()
+
+def perform_update(cnx, query):
+    try:
+        cur = cnx.cursor()
+        cur.execute(query)
+        cnx.commit()
+        affected_rows = cur.rowcount
+        if affected_rows > 0:
+            print(f"{affected_rows} record(s) updated successfully.")
+        else:
+            print("No records were updated, and that's kinda weird.")
     except mysql.connector.Error as err:
         print('MySQL error: {}'.format(err))
         bail()
@@ -108,32 +120,27 @@ def do_add(cnx, ip, host, desc, mac, dhcp):
 
     # ok, let's add this thing...
     print(query)
-    try:
-        cur = cnx.cursor()
-        cur.execute(query)
-        cnx.commit()
-
-        # Check the number of affected rows
-        affected_rows = cur.rowcount
-        if affected_rows > 0:
-            print(f"{affected_rows} record(s) updated successfully.")
-        else:
-            print("No records were updated, and that's kinda weird.")
-    except mysql.connector.Error as err:
-        print('MySQL error: {}'.format(err))
-        bail()
+    perform_update(cnx, query)
 
 
-def do_modify(cnx, ip, host, desc, mac, dhcp):
-    query = "update hms_ip set ip='%s'" % ip
-    try:
-        cur = cnx.cursor()
-        cur.execute(query)
-        row = cur.fetchone()
+def do_modify(cnx, host, desc, mac, dhcp):
+    if host is None:
+        usage('No host name specified.')
+    if desc is None and mac is None and dhcp is None:
+        usage('What do you want to modify?')
+    if check_mac_inuse(cnx, mac):
+        print('MAC %s is already in use.' % mac)
+        sys.exit(5)
 
-    except mysql.connector.Error as err:
-        print('MySQL error: {}'.format(err))
-        bail()
+    query = 'update hms_ip'
+    if mac is not None:
+        query += ",mac='%s'" % mac
+    if desc is not None:
+        query += ",descr='%s'" % desc
+    if dhcp is not None:
+        query += ",dhcp='%s'" % dhcp
+    query += " where host='%s'" % host
+    perform_update(cnx, query)
 
 
 def do_delete(cnx, ip, host):
@@ -162,19 +169,7 @@ def do_delete(cnx, ip, host):
 
     query = "update hms_ip set host=null, descr=null, mac=null, dhcp='N' where ip='%s' and host is not null" % ip
     #print(query)
-    try:
-        cur = cnx.cursor()
-        cur.execute(query)
-        cnx.commit()
-        affected_rows = cur.rowcount
-        if affected_rows > 0:
-            print(f"{affected_rows} record(s) updated successfully.")
-        else:
-            print("No records were updated, and that's kinda weird.")
-    except mysql.connector.Error as err:
-        print('MySQL error: {}'.format(err))
-        bail()
-    return
+    perform_update(cnx, query)
 
 
 def do_list(cnx, ip, host):
@@ -237,7 +232,7 @@ def main():
         opts, args = getopt.getopt(sys.argv[1:], 'AMDLFi:h:m:d:x')
     except getopt.GetoptError as err:
         # print help information and exit:
-        print(err)  # will print something like 'option -a not recognized'
+        print(err, '\n')  # will print something like 'option -a not recognized'
         usage()
 
     ip = None
@@ -303,7 +298,7 @@ def main():
     if mode == 'A':
         do_add(cnx, ip, host, desc, mac, dhcp)
     elif mode == 'M':
-        do_modify(cnx, ip, host, desc, mac, dhcp)
+        do_modify(cnx, host, desc, mac, dhcp)
     elif mode == 'D':
         do_delete(cnx, ip, host)
     elif mode == 'L':

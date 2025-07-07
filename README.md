@@ -34,14 +34,10 @@ The rules are pretty simple, and the options are self-explanatory. The code coul
 The options are coming along, but are still being refined.
 
 ```
-Usage: { -A | -M | -D | -L | -F } -i ip -h hostname -d "description" -m mac -x
-
-
-        -A [ -i ip ] -h hostname [ -m mac ] [ -d "description" ] [ -x ]
-        -M -i ip [ -h hostname | -m mac | -d "description" | -x ]
-        -D -i ip | -h hostname
-        -L -i ip | -h hostname
-        -F
+Usage:  hms -A -h hostname [ -i ip ] [ -d description ] [ -m mac] [ -x ]
+        hms -M -h hostname { -d description | -m mac | -x } [...]
+        hms { -D | L } -h hostname | -i ip
+        hms -F
 ```
 
 Some examples are shown below.
