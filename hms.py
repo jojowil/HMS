@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import getopt, sys
 import re, mysql.connector
 
@@ -232,8 +234,8 @@ def main():
         opts, args = getopt.getopt(sys.argv[1:], 'AMDLFi:h:m:d:x')
     except getopt.GetoptError as err:
         # print help information and exit:
-        print(err, '\n')  # will print something like 'option -a not recognized'
-        usage()
+        #print(err, '\n')  # will print something like 'option -a not recognized'
+        usage("{}".format(err))
 
     ip = None
     host = None
