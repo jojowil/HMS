@@ -72,8 +72,7 @@ def perform_update(cnx, query):
 def do_add(cnx, ip, host, desc, mac, dhcp):
     # mac is optional.
     if mac is None and dhcp == 'Y':
-        print('Cannot use DHCP without a mac!')
-        sys.exit(3)
+        usage('Cannot use DHCP without a mac!')
 
     # mac must not already exist.
     if mac is not None and check_mac_inuse(cnx, mac):
@@ -82,8 +81,7 @@ def do_add(cnx, ip, host, desc, mac, dhcp):
 
     # host is required and unique.
     if host is None:
-        print('No host name specified.')
-        sys.exit(3)
+        usage('No host name specified.')
     elif check_host_inuse(cnx, host):
         print('Host %s is already in use.' % host)
         sys.exit(3)
@@ -121,7 +119,7 @@ def do_add(cnx, ip, host, desc, mac, dhcp):
     query += " where ip='%s'" % ip
 
     # ok, let's add this thing...
-    print(query)
+    #print(query)
     perform_update(cnx, query)
 
 
@@ -188,7 +186,11 @@ def do_list(cnx, ip, host):
         cur.execute(query)
         row = cur.fetchone()
         if row is None:
-            print('No entry found with %s or %s' % (ip, host))
+            if ip is not None and host is not None:
+                print('No entry found with %s or %s' % (ip, host))
+            else:
+                t = ip if ip is not None else host
+                print('No entry found with %s' % (t))
         else:
             print('Host ', row[0])
             print('IP   ', row[1])
@@ -224,7 +226,7 @@ def main():
         f = open(pfile, 'r')
         dbpwd = f.read().strip()
     except IOError:
-        print('Cannot open', pfile, '.')
+        print('Cannot open ' + pfile + '.')
         sys.exit(3)
     f.close()
 
