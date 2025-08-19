@@ -16,7 +16,7 @@ def usage(msg=None):
     if msg is not None:
         print('\nERROR: ' + msg + '\n')
     print('Usage:  hms -A -h hostname [ -i ip ] [ -d description ] [ -m mac] [ -x ]')
-    print('        hms -M -h hostname { -d description | -m mac] | -x } [...]')
+    print('        hms -M -h hostname { -d description | -m mac] | -x }')
     print('        hms { -D | L } -h hostname | -i ip')
     print('        hms -F\n')
     sys.exit(1)
@@ -137,13 +137,13 @@ def do_modify(cnx, host, desc, mac, dhcp):
         print('MAC %s is already in use.' % mac)
         sys.exit(5)
 
-    query = 'update hms_ip'
+    query = 'update hms_ip set '
     if mac is not None:
-        query += ",mac='%s'" % mac
-    if desc is not None:
-        query += ",descr='%s'" % desc
-    if dhcp is not None:
-        query += ",dhcp='%s'" % dhcp
+        query += "mac='%s'" % mac
+    elif desc is not None:
+        query += "descr='%s'" % desc
+    elif dhcp is not None:
+        query += "dhcp='%s'" % dhcp
     query += " where host='%s'" % host
     perform_update(cnx, query)
 
