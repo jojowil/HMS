@@ -123,6 +123,11 @@ def do_add(cnx, ip, host, desc, mac, dhcp):
     perform_update(cnx, query)
 
 
+def do_cname(cnx, cname, host) :
+    if cname is None or host is None:
+        usage('No host name or CNAME target specified.')
+
+
 def do_modify(cnx, host, desc, mac, dhcp):
     if host is None:
         usage('No host name specified.')
@@ -190,7 +195,7 @@ def do_list(cnx, ip, host):
                 print('No entry found with %s or %s' % (ip, host))
             else:
                 t = ip if ip is not None else host
-                print('No entry found with %s' % (t))
+                print('No entry found with %s' % t)
         else:
             print('Host ', row[0])
             print('IP   ', row[1])
@@ -233,7 +238,7 @@ def main():
     # try to get options
     opts=''  # remove opts not assigned warning!
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'AMDLFi:h:m:d:x')
+        opts, args = getopt.getopt(sys.argv[1:], 'ACMDLFt:i:h:m:d:x')
     except getopt.GetoptError as err:
         # print help information and exit:
         #print(err, '\n')  # will print something like 'option -a not recognized'
@@ -243,6 +248,7 @@ def main():
     host = None
     mac = None
     desc = None
+    cname = None
     dhcp = 'N'
     modeset = "AMDLF"
     mode = ""
@@ -251,6 +257,8 @@ def main():
     ipvalid = re.compile(ipregex)
     macregex = '^(?:[0-9a-fA-F]){12}$'
     macvalid = re.compile(macregex)
+    fqdnregex ='^[a-zA-Z][a-zA-Z0-9\\.\\-]{1,254}$'
+    fqdnvalid = re.compile(fqdnregex)
     hostregex ='^[a-zA-Z][a-zA-Z0-9\\-]{1,31}$'
     hostvalid = re.compile(hostregex)
     descregex = '^[\\ a-zA-Z0-9_\\-\\.]{1,31}$'
@@ -265,6 +273,10 @@ def main():
             ip = a
             if not ipvalid.match(ip):
                 usage(ip + ' is not a valid IPv4 address')
+        elif opt == 't':
+            cname = a
+            if not fqdnvalid.match(cname):
+                usage(cname + ' is not a valid target FQDN')
         elif opt == 'h':
             host = a
             if not hostvalid.match(host):
@@ -309,6 +321,8 @@ def main():
         do_list(cnx, ip, host)
     elif mode == 'F':
         do_freelist(cnx)
+    elif mode == 'C':
+        do_cname(cnx, cname, host)
     else:
         usage('FATAL: Unknown mode')
 
