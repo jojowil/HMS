@@ -17,8 +17,10 @@ def usage(msg=None):
         print('\nERROR: ' + msg + '\n')
     print('Usage:  hms -A -h hostname [ -i ip ] [ -d description ] [ -m mac] [ -x ]')
     print('        hms -M -h hostname { -d description | -m mac] | -x }')
-    print('        hms { -D | L } -h hostname | -i ip')
+    print('        hms { -D | -L } -h hostname | -i ip')
     print('        hms -F\n')
+    print(" -A => Add entry.\n -M => Modify entry.\n -D => Delete entry. (Does not ask for confirmation!)")
+    print(" -L => List entries.\n -F => Display free list.\n")
     sys.exit(1)
 
 
