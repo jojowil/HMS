@@ -201,7 +201,10 @@ def do_list(cnx, ip, host):
         else:
             print('Host ', row[0])
             print('IP   ', row[1])
-            formatted_mac = ":".join([row[2][i:i + 2] for i in range(0, 12, 2)])
+            if row[2] is not None:
+                formatted_mac = ":".join([row[2][i:i + 2] for i in range(0, 12, 2)])
+            else:
+                formatted_mac = "NO MAC PROVIDED"
             print('MAC  ', formatted_mac)
             print('Desc ', row[3])
             print('DHCP ', row[4])
