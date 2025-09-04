@@ -20,7 +20,7 @@ def usage(msg=None):
     print('        hms { -D | -L } -h hostname | -i ip')
     print('        hms -F\n')
     print(" -A => Add entry.\n -M => Modify entry.\n -D => Delete entry. (Does not ask for confirmation!)")
-    print(" -L => List entries.\n -F => Display free list.\n")
+    print(" -L => List entries.\n -F => Display free list.\n\n -x => Mark entry to use DHCP.")
     sys.exit(1)
 
 
@@ -201,7 +201,8 @@ def do_list(cnx, ip, host):
         else:
             print('Host ', row[0])
             print('IP   ', row[1])
-            print('MAC  ', row[2])
+            formatted_mac = ":".join([row[2][i:i + 2] for i in range(0, 12, 2)])
+            print('MAC  ', formatted_mac)
             print('Desc ', row[3])
             print('DHCP ', row[4])
     except mysql.connector.Error as err:
