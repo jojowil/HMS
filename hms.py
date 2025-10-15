@@ -267,7 +267,7 @@ def main():
     fqdnvalid = re.compile(fqdnregex)
     hostregex ='^[a-zA-Z][a-zA-Z0-9\\-]{1,31}$'
     hostvalid = re.compile(hostregex)
-    descregex = '^[\\ a-zA-Z0-9_\\-\\.]{1,31}$'
+    descregex = '^[\\ a-zA-Z0-9_\\-\\.]{1,255}$'
     descvalid = re.compile(descregex)
 
     for o, a in opts:
