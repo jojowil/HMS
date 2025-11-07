@@ -45,9 +45,10 @@ The rules are pretty simple, and the options are self-explanatory. The code coul
 The options are coming along, but are still being refined.
 
 ```
-Usage:  hms -A -h hostname [ -i ip ] [ -d description ] [ -m mac] [ -x ]
-        hms -M -h hostname { -d description | -m mac  | -x | -X  ... }
-        hms { -D | -L } -h hostname | -i ip | -c cname
+Usage:  hms -A -h hostname [ -i ip ] [ -d description ] [ -m mac ] [ -x ]
+        hms -M -h hostname [ -d description ] [ -m mac ] [ {-x|-X} ]
+        hms -D { -h hostname | -i ip | -c cname }
+        hms -L [ {-h hostname | -i ip} ]
         hms -R -h hostname -n newname
         hms -C -c cname -h hostname
         hms -F
