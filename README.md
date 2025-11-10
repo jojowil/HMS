@@ -38,6 +38,22 @@ DB = hms
 User = hms
 Pwd = pwd
 Port = 3306
+
+[BIND]
+Host = 141.222.36.200, 141.222.36.196
+NSList = ns1.cs.skidmore.edu, ns2.cs.skidmore.edu
+Key = /root/.ssh/id_dnsbind
+FwdDestName = /etc/bind/cs.skidmoire.edu
+RevDestName = /etc/bind/36.222.141.in-addr.arpa
+User = root
+Port = 22
+
+[DHCP]
+Host = 141.222.36.200, 141.222.36.196
+Key = /root/.ssh/id_dnsbind
+DestName = /etc/dhcp/dhcptail.conf
+User = root
+Port = 22
 ```
 
 The rules are pretty simple, and the options are self-explanatory. The code could use some additional documentation, but I was more concerned about ensuring data validation and minimizing injection opportunities. This project has a rather special purpose, but it was enjoyable to write. After the DB tool is complete, I'll add options to push to DNS and DHCP servers by replacing their basic config files using includes.
@@ -51,6 +67,7 @@ Usage:  hms -A -h hostname [ -i ip ] [ -d description ] [ -m mac ] [ -x ]
         hms -L [ {-h hostname | -i ip} ]
         hms -R -h hostname -n newname
         hms -C -c cname -h hostname
+        hms -P
         hms -F
         hms -V
 
@@ -62,6 +79,7 @@ Usage:  hms -A -h hostname [ -i ip ] [ -d description ] [ -m mac ] [ -x ]
  -L => List entries.
  -F => Display free list.
  -V => Print version.
+ -P => Publish DNS/DHCP to servers based on config stanza.
  -x => Mark entry to use DHCP.
  -X => Disable DHCP.
 ```
