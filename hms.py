@@ -271,12 +271,20 @@ def main():
     #
     config = configparser.ConfigParser()
 
+    # Silence warnings
+    dbhost = None
+    dbuser = None
+    dbpass = None
+    dbport = None
+    dbname = None
+
+    # Get options from ini.
     try:
         if not os.path.exists(CONFIG):
             raise FileNotFoundError(f"Configuration file '{CONFIG}' not found.")
         config.read(CONFIG)
         # Access configuration values here
-        dbpwd = config.get('DEFAULT','Pwd')
+        dbpass = config.get('DEFAULT','Pwd')
         dbhost = config.get('DEFAULT','Host')
         dbuser = config.get('DEFAULT','User')
         dbport = config.get('DEFAULT','Port')
@@ -363,7 +371,7 @@ def main():
         usage('Choose one of add, modify, delete, list, free, or version.')
 
     if mode == 'V':
-        do_version();
+        do_version()
 
     # Connect to server
     try:
@@ -372,7 +380,7 @@ def main():
         port=dbport,
         user=dbuser,
         database=dbname,
-        password=dbpwd)
+        password=dbpass)
     except mysql.connector.Error as err:
         print(f'Error connecting to MySQL: {err}')
         sys.exit(2)
