@@ -40,10 +40,11 @@ Pwd = pwd
 Port = 3306
 
 [BIND]
+Domain = cs.skidmore.edu
 Host = 141.222.36.200, 141.222.36.196
 NSList = ns1.cs.skidmore.edu, ns2.cs.skidmore.edu
 Key = /root/.ssh/id_dnsbind
-FwdDestName = /etc/bind/cs.skidmoire.edu
+FwdDestName = /etc/bind/cs.skidmore.edu
 RevDestName = /etc/bind/36.222.141.in-addr.arpa
 User = root
 Port = 22
@@ -60,26 +61,26 @@ The rules are pretty simple, and the options are self-explanatory. The code coul
 
 The options are coming along, but are still being refined.
 
-```
+``` 
 Usage:  hms -A -h hostname [ -i ip ] [ -d description ] [ -m mac ] [ -x ]
-        hms -M -h hostname [ -d description ] [ -m mac ] [ {-x|-X} ]
-        hms -D { -h hostname | -i ip | -c cname }
-        hms -L [ {-h hostname | -i ip} ]
-        hms -R -h hostname -n newname
         hms -C -c cname -h hostname
-        hms -P
+        hms -D { -h hostname | -i ip | -c cname }
         hms -F
+        hms -L [ {-h hostname | -i ip} ]
+        hms -M -h hostname [ -d description ] [ -m mac ] [ {-x|-X} ]
+        hms -P
+        hms -R { -h hostname | -c cname } -n newname
         hms -V
 
  -A => Add entry.
- -M => Modify entry.
- -D => Delete entry. (Does not ask for confirmation!)
- -R => Rename host entry. (Does not ask for confirmation!)
  -C => Create CNAME entry.
- -L => List entries.
+ -D => Delete entry. (Does not ask for confirmation!)
  -F => Display free list.
- -V => Print version.
+ -L => List entries.
+ -M => Modify entry.
  -P => Publish DNS/DHCP to servers based on config stanza.
+ -R => Rename host entry. (Does not ask for confirmation!)
+ -V => Print version.
  -x => Mark entry to use DHCP.
  -X => Disable DHCP.
 ```
