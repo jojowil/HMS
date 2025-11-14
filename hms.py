@@ -2,10 +2,14 @@
 
 import getopt, sys, configparser, os
 import re, mysql.connector
+from datetime import datetime
 
-
-VERSION = "1.1.0-20251106"
+VERSION = "1.2.0-20251110"
 CONFIG = "/etc/hms.ini"
+FIXED = "/etc/hms.fixed"
+
+def get_serial():
+    return datetime.now().strftime("%y%m%d%H%M")
 
 
 def bail():
@@ -13,28 +17,71 @@ def bail():
     sys.exit(255)
 
 
-def config_usage():
+def config_default_usage():
     print(f"Check the {CONFIG} file for valid options.\nSee sample below.")
-    print("\n[DEFAULT]\nHost = 127.0.0.1\nDB = hms\nUser = hms\nPwd = pwd\nPort = 3306")
+    print("""
+[DEFAULT]
+Host = 127.0.0.1
+DB = hms
+User = hms
+Pwd = pwd
+Port = 3306
+""")
+    sys.exit(1)
+
+
+def config_bind_dhcp_usage():
+    print(f"Check the {CONFIG} file for valid options.\nSee sample below.")
+    print("""
+[BIND]
+Domain = cs.skidmore.edu
+Host = 141.222.36.200, 141.222.36.196
+NSList = ns1.cs.skidmore.edu, ns2.cs.skidmore.edu
+Key = /root/.ssh/id_dnsbind
+FwdDestName = /etc/bind/cs.skidmore.edu
+RevDestName = /etc/bind/36.222.141.in-addr.arpa
+User = root
+Port = 22
+""")
+    print("""
+[DHCP]
+Host = 141.222.36.200, 141.222.36.196
+Key = /root/.ssh/id_dnsbind
+DestName = /etc/dhcp/dhcptail.conf
+User = root
+Port = 22
+""")
     sys.exit(1)
 
 
 def usage(msg=None):
     if msg is not None:
         print('\nERROR: ' + msg + '\n')
-    print('Usage:  hms -A -h hostname [ -i ip ] [ -d description ] [ -m mac ] [ -x ]')
-    print('        hms -M -h hostname [ -d description ] [ -m mac ] [ {-x|-X} ]')
-    print('        hms -D { -h hostname | -i ip | -c cname }')
-    print('        hms -L [ {-h hostname | -i ip} ]')
-    print('        hms -R -h hostname -n newname')
-    print('        hms -C -c cname -h hostname')
-    print('        hms -F')
-    print('        hms -V\n')
-    print(" -A => Add entry.\n -M => Modify entry.\n -D => Delete entry. (Does not ask for confirmation!)")
-    print(" -R => Rename host entry. (Does not ask for confirmation!)")
-    print(" -C => Create CNAME entry.")
-    print(" -L => List entries.\n -F => Display free list.\n -V => Print version.")
-    print(" -x => Mark entry to use DHCP.\n -X => Disable DHCP.\n")
+    print('''
+Usage:  hms -A -h hostname [ -i ip ] [ -d description ] [ -m mac ] [ -x ]
+        hms -C -c cname -h hostname
+        hms -D { -h hostname | -i ip | -c cname }
+        hms -F
+        hms -L [ {-h hostname | -i ip} ]
+        hms -M -h hostname [ -d description ] [ -m mac ] [ {-x|-X} ]
+        hms -P
+        hms -R { -h hostname | -c cname } -n newname
+        hms -V
+''')
+
+    print('''
+ -A => Add entry.
+ -C => Create CNAME entry.
+ -D => Delete entry. (Does not ask for confirmation!)
+ -F => Display free list.
+ -L => List entries.
+ -M => Modify entry.
+ -P => Publish DNS/DHCP to servers based on config stanza.
+ -R => Rename host entry. (Does not ask for confirmation!)
+ -V => Print version.
+ -x => Mark entry to use DHCP.
+ -X => Disable DHCP.
+''')
     sys.exit(1)
 
 
@@ -69,6 +116,17 @@ def check_ip_inuse(cnx, ip):
     except mysql.connector.Error as err:
         print('MySQL error: {}'.format(err))
         bail()
+
+def perform_select(cnx, query):
+    try:
+        cur = cnx.cursor()
+        # Execute a query
+        cur.execute(query)
+        return cur
+    except mysql.connector.Error as err:
+        print('MySQL error: {}'.format(err))
+        bail()
+
 
 def perform_update(cnx, query):
     try:
@@ -190,7 +248,7 @@ def do_delete(cnx, ip, host):
         sys.exit(5)
     # host in use?
     if host is not None and not check_host_inuse(cnx, host):
-        print('Host %s does not.' % host)
+        print('Host %s does not exist.' % host)
         sys.exit(5)
     # get the ip if we only have the host
     if ip is None and host is not None:
@@ -265,6 +323,98 @@ def do_version():
     sys.exit(0)
 
 
+def do_bind_publish(cnx, config):
+    #
+    # Get publish data from /etc/hms.ini
+    #
+    bhost = None
+    bnlist = None
+    bkey = None
+    bfwd = None
+    brev = None
+    buser = None
+    bport = None
+    bdom = None
+
+    # Get options from ini.
+    try:
+        # Config already established
+        bhost = config.get('BIND', 'Host')
+        bnlist = config.get('BIND', 'NSList')
+        bkey = config.get('BIND', 'Key')
+        bfwd = config.get('BIND', 'FwdDestName')
+        brev = config.get('BIND', 'RevDestName')
+        buser = config.get('BIND', 'User')
+        bport = config.get('BIND', 'Port')
+        bdom = config.get('BIND', 'Domain')
+    except (configparser.NoSectionError, configparser.NoOptionError) as e:
+        print(f"Configuration error: {e}")
+        config_default_usage()
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        config_default_usage()
+
+    nslist = ''
+    for x in bnlist.split(','):
+        nslist += f'@ IN NS {x}.\n'
+
+    # Build files
+    serial = get_serial()
+    forward = f"""$TTL 5M;
+;$ORIGIN	cs.skidmore.edu.
+@		IN	SOA	cslab.cs.skidmore.edu. root.skidmore.edu. (
+				{serial}	; serial
+				1200		; refresh 20M
+				600	        ; retry 5M
+				1209600	    ; expire 2W
+				3600 )      ; NEG Cache TTL 1H
+{nslist}
+
+"""
+
+    reverse = f"""$TTL 5M;
+;$ORIGIN cs.skidmore.edu.
+@               IN      SOA     localhost. root.skidmore.edu. (
+                                {serial}        ; serial
+                                1200            ; refresh 20M
+                                600             ; retry 5M
+                                1209600         ; Expire 2W
+                                3600 )          ; NEG cache TTL 1H
+
+{nslist}
+
+"""
+
+    # Get fixed content, if exists.
+    if os.path.exists(FIXED):
+        with open(FIXED, 'r') as file:
+            forward += '\n' + file.read() + '\n'
+
+    # Add CNAME records
+    cur = perform_select(cnx, 'SELECT cname, host from hms_cname where cname is not null')
+    for row in cur:
+        # cname IN CNAME target.host.dom.
+        forward += f'{row[0]} IN CNAME {row[1]}.\n'
+
+    # Add forward and reverse records
+    cur = perform_select(cnx, 'SELECT host, ip from hms_ip where host is not null')
+    for row in cur:
+        # host IN CNAME x.x.x.x
+        forward += f'{row[0]}\tIN\tA\t{row[1]}\n'
+        pieces =row[1].split('.')
+        reverse += f'{pieces[3]}.{pieces[2]}\tIN\tPTR\t{row[0]}.{bdom}.\n'
+
+    # Create forward file
+    with open('/tmp/forward.zone', 'w') as file:
+        file.write(forward)
+
+    # Create reverse file
+    with open('/tmp/reverse.zone', 'w') as file:
+        file.write(reverse)
+
+    # Push files to endpoint
+
+
 def main():
     #
     # Get DB data from /etc/hms.ini
@@ -283,7 +433,7 @@ def main():
         if not os.path.exists(CONFIG):
             raise FileNotFoundError(f"Configuration file '{CONFIG}' not found.")
         config.read(CONFIG)
-        # Access configuration values here
+        # Get default settings for DB
         dbpass = config.get('DEFAULT','Pwd')
         dbhost = config.get('DEFAULT','Host')
         dbuser = config.get('DEFAULT','User')
@@ -291,18 +441,18 @@ def main():
         dbname = config.get('DEFAULT','DB')
     except FileNotFoundError as e:
         print(f"Error: {e}")
-        config_usage()
+        config_default_usage()
     except (configparser.NoSectionError, configparser.NoOptionError) as e:
         print(f"Configuration error: {e}")
-        config_usage()
+        config_default_usage()
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
-        config_usage()
+        config_default_usage()
 
     # try to get options
     opts=''  # remove opts not assigned warning!
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'ACMDLFRVc:i:h:n:m:d:xX')
+        opts, args = getopt.getopt(sys.argv[1:], 'ACMDLFPRVc:i:h:n:m:d:xX')
     except getopt.GetoptError as err:
         # print help information and exit:
         #print(err, '\n')  # will print something like 'option -a not recognized'
@@ -315,7 +465,7 @@ def main():
     desc = None
     cname = None
     dhcp = 'N'
-    modeset = "ACMDLFRV"
+    modeset = "ACMDLFPRV"
     mode = ""
 
     ipregex = '^(?:(?:25[0-5]|(?:2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}$'
@@ -399,6 +549,22 @@ def main():
         do_cname(cnx, cname, host)
     elif mode == 'R':
         do_rename(cnx, host, newhost)
+    elif mode == 'P':
+        config = configparser.ConfigParser()
+        config.read(CONFIG)
+        dobind = config.has_section('BIND')
+        dodhcp = config.has_section('DHCP')
+
+        if not dobind and not dodhcp:
+            print("No BIND or DHCP section found.")
+            config_bind_dhcp_usage()
+
+        if (dodhcp):
+            print("DHCP is net yet implemented.")  # do dhcp push
+            # do_dhcp_publish(cnx, config)
+
+        if (dobind):
+            do_bind_publish(cnx, config)
     else:
         usage('FATAL: Unknown mode')
 
