@@ -41,17 +41,17 @@ Port = 3306
 
 [BIND]
 Domain = cs.skidmore.edu
-Host = 141.222.36.200, 141.222.36.196
-NSList = ns1.cs.skidmore.edu, ns2.cs.skidmore.edu
+Host = 141.222.36.200,141.222.36.196
+NSList = ns1.cs.skidmore.edu,ns2.cs.skidmore.edu
 Key = /root/.ssh/id_dnsbind
-FwdDestName = /etc/bind/cs.skidmore.edu
-RevDestName = /etc/bind/36.222.141.in-addr.arpa
+FwdZoneDestName = cs.skidmore.edu,/etc/bind/cs.skidmore.edu
+RevZoneDestName = 36.222.141.in-addr.arpa,/etc/bind/36.222.141.in-addr.arpa
 User = root
 Port = 22
 
 [DHCP]
 Host = 141.222.36.200, 141.222.36.196
-Key = /root/.ssh/id_dnsbind
+Key = /root/.ssh/id_dhcp
 DestName = /etc/dhcp/dhcptail.conf
 User = root
 Port = 22
