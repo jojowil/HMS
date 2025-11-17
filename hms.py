@@ -437,11 +437,13 @@ def do_bind_publish(cnx, config):
         reverse += f'{pieces[3]}.{pieces[2]}\tIN\tPTR\t{row[0]}.{bdom}.\n'
 
     # Create forward file
+    # FIXME check for file access
     tmpfwd = '/tmp/forward.zone'
     with open(tmpfwd, 'w') as file:
         file.write(forward)
 
     # Create reverse file
+    # FIXME check for file access
     tmprev = '/tmp/reverse.zone'
     with open(tmprev, 'w') as file:
         file.write(reverse)
@@ -460,7 +462,7 @@ def do_bind_publish(cnx, config):
         # Test Zones.
         cmd = f'ssh -i {bkey} -p {bport} {buser}@{h} "named-checkzone {bfwdzone} {bfwdname}"'
         run_command(cmd)
-        cmd = f'ssh -i {bkey} -p {bport} {buser}@{h}"named-checkzone {brevzone} {brevname}"'
+        cmd = f'ssh -i {bkey} -p {bport} {buser}@{h} "named-checkzone {brevzone} {brevname}"'
         run_command(cmd)
 
 
