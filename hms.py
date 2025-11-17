@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
-import getopt, sys, configparser, os
+import getopt, sys, configparser, os, subprocess
 import re, mysql.connector
 from datetime import datetime
 
-VERSION = "1.2.0-20251110"
+VERSION = "1.2.0-20251117"
 CONFIG = "/etc/hms.ini"
 FIXED = "/etc/hms.fixed"
 
@@ -35,18 +35,18 @@ def config_bind_dhcp_usage():
     print("""
 [BIND]
 Domain = cs.skidmore.edu
-Host = 141.222.36.200, 141.222.36.196
-NSList = ns1.cs.skidmore.edu, ns2.cs.skidmore.edu
+Host = 141.222.36.200,141.222.36.196
+NSList = ns1.cs.skidmore.edu,ns2.cs.skidmore.edu
 Key = /root/.ssh/id_dnsbind
-FwdDestName = /etc/bind/cs.skidmore.edu
-RevDestName = /etc/bind/36.222.141.in-addr.arpa
+FwdZoneDestName = cs.skidmore.edu,/etc/bind/cs.skidmore.edu
+RevZoneDestName = 36.222.141.in-addr.arpa,/etc/bind/36.222.141.in-addr.arpa
 User = root
 Port = 22
 """)
     print("""
 [DHCP]
 Host = 141.222.36.200, 141.222.36.196
-Key = /root/.ssh/id_dnsbind
+Key = /root/.ssh/id_dhcp
 DestName = /etc/dhcp/dhcptail.conf
 User = root
 Port = 22
@@ -100,6 +100,17 @@ def check_host_inuse(cnx, host):
     try:
         cur = cnx.cursor()
         cur.execute("SELECT ip FROM hms_ip WHERE host = %s ", (host,))
+        cur.fetchone()
+        return True if cur.rowcount > 0 else False
+    except mysql.connector.Error as err:
+        print('MySQL error: {}'.format(err))
+        bail()
+
+
+def check_cname_inuse(cnx, cname):
+    try:
+        cur = cnx.cursor()
+        cur.execute("SELECT ip FROM hms_cname WHERE cname = %s ", (cname,))
         cur.fetchone()
         return True if cur.rowcount > 0 else False
     except mysql.connector.Error as err:
@@ -205,7 +216,7 @@ def do_cname(cnx, cname, host) :
     perform_update(cnx, query)
 
 
-def do_rename(cnx, host, newhost):
+def do_rename_host(cnx, host, newhost):
     if host is None or newhost is None:
         usage('No old name or new name specified.')
         sys.exit(3)
@@ -214,6 +225,18 @@ def do_rename(cnx, host, newhost):
         sys.exit(3)
 
     query = "update hms_ip set host='%s' where host='%s'" % (newhost, host)
+    perform_update(cnx, query)
+
+
+def do_rename_cname(cnx, cname, newcname):
+    if cname is None or newcname is None:
+        usage('No old CNAME or new CNAME specified.')
+        sys.exit(3)
+    if not check_cname_inuse(cnx, cname):
+        usage('CNAME %s does not exist.' % cname)
+        sys.exit(3)
+
+    query = "update hms_cname set cname='%s' where cname='%s'" % (newcname, cname)
     perform_update(cnx, query)
 
 
@@ -330,8 +353,10 @@ def do_bind_publish(cnx, config):
     bhost = None
     bnlist = None
     bkey = None
-    bfwd = None
-    brev = None
+    bfwdzone = None
+    bfwdname = None
+    brevzone = None
+    brevname = None
     buser = None
     bport = None
     bdom = None
@@ -342,17 +367,24 @@ def do_bind_publish(cnx, config):
         bhost = config.get('BIND', 'Host')
         bnlist = config.get('BIND', 'NSList')
         bkey = config.get('BIND', 'Key')
-        bfwd = config.get('BIND', 'FwdDestName')
-        brev = config.get('BIND', 'RevDestName')
+        f = config.get('BIND', 'FwdZoneDestName')
+        bfwdzone = f.split(',')[0]
+        bfwdname = f.split(',')[1]
+        r = config.get('BIND', 'RevZoneDestName')
+        brevzone = r.split(',')[0]
+        brevname = r.split(',')[1]
         buser = config.get('BIND', 'User')
         bport = config.get('BIND', 'Port')
         bdom = config.get('BIND', 'Domain')
     except (configparser.NoSectionError, configparser.NoOptionError) as e:
         print(f"Configuration error: {e}")
-        config_default_usage()
+        config_bind_dhcp_usage()
+    except (IndexError) as e:
+        print(f"Configuration error: Check zone entries. {e}")
+        config_bind_dhcp_usage()
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
-        config_default_usage()
+        config_bind_dhcp_usage()
 
     nslist = ''
     for x in bnlist.split(','):
@@ -405,14 +437,39 @@ def do_bind_publish(cnx, config):
         reverse += f'{pieces[3]}.{pieces[2]}\tIN\tPTR\t{row[0]}.{bdom}.\n'
 
     # Create forward file
-    with open('/tmp/forward.zone', 'w') as file:
+    tmpfwd = '/tmp/forward.zone'
+    with open(tmpfwd, 'w') as file:
         file.write(forward)
 
     # Create reverse file
-    with open('/tmp/reverse.zone', 'w') as file:
+    tmprev = '/tmp/reverse.zone'
+    with open(tmprev, 'w') as file:
         file.write(reverse)
 
     # Push files to endpoint
+    for h in bhost.split(','):
+        # scp -i key {tmpfwd} h:{bfwdname}
+        # Send forward
+        cmd = f'scp -i {bkey} -P {bport} {tmpfwd} {buser}@{h}:{bfwdname}'
+        run_command(cmd)
+
+        # Send reverse
+        cmd = f'scp -i {bkey} -P {bport} {tmprev} {buser}@{h}:{brevname}'
+        run_command(cmd)
+
+        # Test Zones.
+        cmd = f'ssh -i {bkey} -p {bport} {buser}@{h} "named-checkzone {bfwdzone} {bfwdname}"'
+        run_command(cmd)
+        cmd = f'ssh -i {bkey} -p {bport} {buser}@{h}"named-checkzone {brevzone} {brevname}"'
+        run_command(cmd)
+
+
+def run_command(cmd):
+    print(f'Running command: {cmd}')
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    print(result.stdout, result.stderr, result.returncode)
+    if result.returncode != 0:
+        bail()
 
 
 def main():
@@ -488,6 +545,7 @@ def main():
             ip = a
             if not ipvalid.match(ip):
                 usage(ip + ' is not a valid IPv4 address')
+        # FIXME
         elif opt == 'c':
             cname = a
             if not fqdnvalid.match(cname):
@@ -545,10 +603,12 @@ def main():
         do_list(cnx, ip, host)
     elif mode == 'F':
         do_freelist(cnx)
+    # FIXME
     elif mode == 'C':
         do_cname(cnx, cname, host)
+    # FIXME
     elif mode == 'R':
-        do_rename(cnx, host, newhost)
+        do_rename_host(cnx, host, newhost)
     elif mode == 'P':
         config = configparser.ConfigParser()
         config.read(CONFIG)
@@ -559,11 +619,11 @@ def main():
             print("No BIND or DHCP section found.")
             config_bind_dhcp_usage()
 
-        if (dodhcp):
+        if dodhcp:
             print("DHCP is net yet implemented.")  # do dhcp push
             # do_dhcp_publish(cnx, config)
 
-        if (dobind):
+        if dobind:
             do_bind_publish(cnx, config)
     else:
         usage('FATAL: Unknown mode')
