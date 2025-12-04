@@ -4,7 +4,7 @@ import getopt, sys, configparser, os, subprocess
 import re, mysql.connector
 from datetime import datetime
 
-VERSION = "1.2.0-20251117"
+VERSION = "1.2.0-20251204"
 CONFIG = "/etc/hms.ini"
 FIXED = "/etc/hms.fixed"
 
@@ -394,7 +394,7 @@ def do_bind_publish(cnx, config):
     serial = get_serial()
     forward = f"""$TTL 5M;
 ;$ORIGIN	cs.skidmore.edu.
-@		IN	SOA	cslab.cs.skidmore.edu. root.skidmore.edu. (
+@		IN	SOA	ns1.cs.skidmore.edu. root.cs.skidmore.edu. (
 				{serial}	; serial
 				1200		; refresh 20M
 				600	        ; retry 5M
@@ -406,7 +406,7 @@ def do_bind_publish(cnx, config):
 
     reverse = f"""$TTL 5M;
 ;$ORIGIN cs.skidmore.edu.
-@               IN      SOA     localhost. root.skidmore.edu. (
+@               IN      SOA     localhost. root.cs.skidmore.edu. (
                                 {serial}        ; serial
                                 1200            ; refresh 20M
                                 600             ; retry 5M
