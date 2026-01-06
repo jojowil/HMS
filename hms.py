@@ -374,7 +374,7 @@ def do_bind_publish(cnx, config):
         f = config.get('BIND', 'FwdZoneDestName')
         bfwdzone = f.split(',')[0]
         bfwdname = f.split(',')[1]
-        rev = config.get('BIND', 'RevZoneDestName')
+        rev = config.get('BIND', 'RevZoneDestName').split(':')
         for r in rev:
             parts = r.split(',')
             brevzone.append(parts[0])
@@ -487,11 +487,11 @@ def do_bind_publish(cnx, config):
         for h in bhost.split(','):
             # scp -i key {tmpfwd} h:{bfwdname}
             # Send reverse
-            cmd = f'scp -i {bkey} -P {bport} {tmprev} {buser}@{h}:{brevname}'
+            cmd = f'scp -i {bkey} -P {bport} {tmprev} {buser}@{h}:{brevname[i]}'
             run_command(cmd)
 
             # Test Zones.
-            cmd = f'ssh -i {bkey} -p {bport} {buser}@{h} "named-checkzone {brevzone} {brevname}"'
+            cmd = f'ssh -i {bkey} -p {bport} {buser}@{h} "named-checkzone {brevzone[i]} {brevname[i]}"'
             run_command(cmd)
 
 
