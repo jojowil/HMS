@@ -4,7 +4,7 @@ import getopt, sys, configparser, os, subprocess
 import re, mysql.connector
 from datetime import datetime
 
-VERSION = "1.2.0-20251204"
+VERSION = "1.2.1-20260106"
 CONFIG = "/etc/hms.ini"
 FIXED = "/etc/hms.fixed"
 
@@ -39,7 +39,8 @@ Host = 141.222.36.200,141.222.36.196
 NSList = ns1.cs.skidmore.edu,ns2.cs.skidmore.edu
 Key = /root/.ssh/id_dnsbind
 FwdZoneDestName = cs.skidmore.edu,/etc/bind/cs.skidmore.edu
-RevZoneDestName = 36.222.141.in-addr.arpa,/etc/bind/36.222.141.in-addr.arpa
+# ip wildcard is optional to allow multiple reverse zones.
+RevZoneDestName = 36.222.141.in-addr.arpa,/etc/bind/36.222.141.in-addr.arpa,141.222.36.%
 User = root
 Port = 22
 """)
@@ -353,10 +354,13 @@ def do_bind_publish(cnx, config):
     bhost = None
     bnlist = None
     bkey = None
+    # FIXME - Multiple forward zones?
     bfwdzone = None
     bfwdname = None
-    brevzone = None
-    brevname = None
+    # Allow multiple reverse zones.
+    brevzone = []
+    brevname = []
+    brevwild = []
     buser = None
     bport = None
     bdom = None
@@ -370,16 +374,22 @@ def do_bind_publish(cnx, config):
         f = config.get('BIND', 'FwdZoneDestName')
         bfwdzone = f.split(',')[0]
         bfwdname = f.split(',')[1]
-        r = config.get('BIND', 'RevZoneDestName')
-        brevzone = r.split(',')[0]
-        brevname = r.split(',')[1]
+        rev = config.get('BIND', 'RevZoneDestName')
+        for r in rev:
+            parts = r.split(',')
+            brevzone.append(parts[0])
+            brevname.append(parts[1])
+            if len(parts) > 2:
+                brevwild.append(parts[2])
+            else:
+                brevwild.append(None)
         buser = config.get('BIND', 'User')
         bport = config.get('BIND', 'Port')
         bdom = config.get('BIND', 'Domain')
     except (configparser.NoSectionError, configparser.NoOptionError) as e:
         print(f"Configuration error: {e}")
         config_bind_dhcp_usage()
-    except (IndexError) as e:
+    except IndexError as e:
         print(f"Configuration error: Check zone entries. {e}")
         config_bind_dhcp_usage()
     except Exception as e:
@@ -428,13 +438,11 @@ def do_bind_publish(cnx, config):
         # cname IN CNAME target.host.dom.
         forward += f'{row[0]} IN CNAME {row[1]}.\n'
 
-    # Add forward and reverse records
+    # Add forward records
     cur = perform_select(cnx, 'SELECT host, ip from hms_ip where host is not null')
     for row in cur:
         # host IN CNAME x.x.x.x
         forward += f'{row[0]}\tIN\tA\t{row[1]}\n'
-        pieces =row[1].split('.')
-        reverse += f'{pieces[3]}.{pieces[2]}\tIN\tPTR\t{row[0]}.{bdom}.\n'
 
     # Create forward file
     # FIXME check for file access
@@ -442,28 +450,50 @@ def do_bind_publish(cnx, config):
     with open(tmpfwd, 'w') as file:
         file.write(forward)
 
-    # Create reverse file
-    # FIXME check for file access
-    tmprev = '/tmp/reverse.zone'
-    with open(tmprev, 'w') as file:
-        file.write(reverse)
-
-    # Push files to endpoint
+    # Push file to endpoint
     for h in bhost.split(','):
         # scp -i key {tmpfwd} h:{bfwdname}
         # Send forward
         cmd = f'scp -i {bkey} -P {bport} {tmpfwd} {buser}@{h}:{bfwdname}'
         run_command(cmd)
 
-        # Send reverse
-        cmd = f'scp -i {bkey} -P {bport} {tmprev} {buser}@{h}:{brevname}'
-        run_command(cmd)
-
         # Test Zones.
         cmd = f'ssh -i {bkey} -p {bport} {buser}@{h} "named-checkzone {bfwdzone} {bfwdname}"'
         run_command(cmd)
-        cmd = f'ssh -i {bkey} -p {bport} {buser}@{h} "named-checkzone {brevzone} {brevname}"'
-        run_command(cmd)
+
+    #
+    # The REVERSE work is trickier.
+    #
+
+    for i in range(len(brevzone)):
+        reverse = ''
+        add =''
+        if brevwild[i] is not None:
+            add = f" and ip like '{brevwild[i]}'"
+        query = "SELECT host, ip from hms_ip where host is not null %s" % add
+        cur = perform_select(cnx, query)
+        # Add forward and reverse records
+        for row in cur:
+            pieces =row[1].split('.')
+            reverse += f'{pieces[3]}.{pieces[2]}\tIN\tPTR\t{row[0]}.{bdom}.\n'
+
+        # Create reverse file
+        # FIXME check for file access
+        tmprev = '/tmp/reverse.zone'
+        with open(tmprev, 'w') as file:
+            file.write(reverse)
+
+        # Push files to endpoint
+        for h in bhost.split(','):
+            # scp -i key {tmpfwd} h:{bfwdname}
+            # Send forward
+            # Send reverse
+            cmd = f'scp -i {bkey} -P {bport} {tmprev} {buser}@{h}:{brevname}'
+            run_command(cmd)
+
+            # Test Zones.
+            cmd = f'ssh -i {bkey} -p {bport} {buser}@{h} "named-checkzone {brevzone} {brevname}"'
+            run_command(cmd)
 
 
 def run_command(cmd):

@@ -45,7 +45,8 @@ Host = 141.222.36.200,141.222.36.196
 NSList = ns1.cs.skidmore.edu,ns2.cs.skidmore.edu
 Key = /root/.ssh/id_dnsbind
 FwdZoneDestName = cs.skidmore.edu,/etc/bind/cs.skidmore.edu
-RevZoneDestName = 36.222.141.in-addr.arpa,/etc/bind/36.222.141.in-addr.arpa
+# ip wildcard is optional to allow multiple reverse zones.
+RevZoneDestName = 36.222.141.in-addr.arpa,/etc/bind/36.222.141.in-addr.arpa,141.222.36.%
 User = root
 Port = 22
 
