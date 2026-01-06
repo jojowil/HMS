@@ -40,7 +40,7 @@ NSList = ns1.cs.skidmore.edu,ns2.cs.skidmore.edu
 Key = /root/.ssh/id_dnsbind
 FwdZoneDestName = cs.skidmore.edu,/etc/bind/cs.skidmore.edu
 # ip wildcard is optional to allow multiple reverse zones.
-RevZoneDestName = 36.222.141.in-addr.arpa,/etc/bind/36.222.141.in-addr.arpa,141.222.36.%
+RevZoneDestName = 36.222.141.in-addr.arpa,/etc/bind/staged-36.222.141.in-addr.arpa,141.222.36.%%:37.222.141.in-addr.arpa,/etc/bind/staged-37.222.141.in-addr.arpa,141.222.37.%%
 User = root
 Port = 22
 """)
@@ -414,7 +414,7 @@ def do_bind_publish(cnx, config):
 
 """
 
-    reverse = f"""$TTL 5M;
+    reversefixed = f"""$TTL 5M;
 ;$ORIGIN cs.skidmore.edu.
 @               IN      SOA     localhost. root.cs.skidmore.edu. (
                                 {serial}        ; serial
@@ -466,7 +466,7 @@ def do_bind_publish(cnx, config):
     #
 
     for i in range(len(brevzone)):
-        reverse = ''
+        reverse = reversefixed
         add =''
         if brevwild[i] is not None:
             add = f" and ip like '{brevwild[i]}'"
@@ -486,7 +486,6 @@ def do_bind_publish(cnx, config):
         # Push files to endpoint
         for h in bhost.split(','):
             # scp -i key {tmpfwd} h:{bfwdname}
-            # Send forward
             # Send reverse
             cmd = f'scp -i {bkey} -P {bport} {tmprev} {buser}@{h}:{brevname}'
             run_command(cmd)
@@ -652,7 +651,7 @@ def main():
             config_bind_dhcp_usage()
 
         if dodhcp:
-            print("DHCP is net yet implemented.")  # do dhcp push
+            print("DHCP is not yet implemented.")  # do dhcp push
             # do_dhcp_publish(cnx, config)
 
         if dobind:
