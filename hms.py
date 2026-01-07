@@ -475,7 +475,9 @@ def do_bind_publish(cnx, config):
         # Add forward and reverse records
         for row in cur:
             pieces =row[1].split('.')
-            reverse += f'{pieces[3]}.{pieces[2]}\tIN\tPTR\t{row[0]}.{bdom}.\n'
+            # FIXME this needs to account for rev zone IP representation!
+            #reverse += f'{pieces[3]}.{pieces[2]}\tIN\tPTR\t{row[0]}.{bdom}.\n'
+            reverse += f'{pieces[3]}\tIN\tPTR\t{row[0]}.{bdom}.\n'
 
         # Create reverse file
         # FIXME check for file access
